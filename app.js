@@ -1,6 +1,3 @@
-// ==========================================================
-// app.js - دفتر الدروس
-// ==========================================================
 import {
     auth,
     db,
@@ -680,10 +677,3 @@ document.addEventListener("DOMContentLoaded", () => {
     setupProfileMenu();
     setupDeleteAccount();
 });
-
-// في app.js داخل openViewer:
-const doc_ = await pdfjsLib.getDocument({
-    url: state.currentMeta.pdfUrl,
-    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-    cMapPacked: true,
-}).promise;
