@@ -19,29 +19,7 @@ import {
     query,
     where
 } from "./firebase.js";
-import { uploadToCloudinary, cldThumb } from "./cloudinary.js";
-
-// ----------------------------------------------------------
-// إعداد pdf.js: تشغيله على Worker منفصل (أسرع وما يجمّد الواجهة)
-// + تحميل خرائط الحروف (CMaps) والخطوط القياسية اللي لازمة عشان
-// النصوص العربية (خطوط CID) تترسم صح بدون تراكب/تشويه بالحروف.
-// ----------------------------------------------------------
-const PDFJS_VERSION = "3.11.174";
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
-
-const PDF_CMAP_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
-const PDF_STANDARD_FONTS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
-
-function loadPdf(source) {
-    // source: { url } أو { data }
-    return pdfjsLib.getDocument({
-        ...source,
-        cMapUrl: PDF_CMAP_URL,
-        cMapPacked: true,
-        standardFontDataUrl: PDF_STANDARD_FONTS_URL,
-    }).promise;
-}
+import { uploadToCloudinary } from "./cloudinary.js";
 
 let currentUser = null;
 
@@ -115,7 +93,7 @@ function updateAvatarUI(user) {
     const fallback = document.getElementById("profile-avatar-fallback");
     if (!img || !fallback) return;
     if (user && user.photoURL) {
-        img.src = cldThumb(user.photoURL, { w: 84, h: 84 });
+        img.src = user.photoURL;
         img.style.display = "block";
         fallback.style.display = "none";
     } else {
@@ -150,7 +128,7 @@ function setupProfileMenu() {
             menu.classList.remove("open");
             if (profileModalAvatar) {
                 if (currentUser && currentUser.photoURL) {
-                    profileModalAvatar.src = cldThumb(currentUser.photoURL, { w: 160, h: 160 });
+                    profileModalAvatar.src = currentUser.photoURL;
                     profileModalAvatar.style.display = "block";
                 } else {
                     profileModalAvatar.style.display = "none";
@@ -189,7 +167,7 @@ function setupProfileMenu() {
                 if (profileModal) profileModal.style.display = "none";
                 if (profileImageInput) profileImageInput.value = "";
             } catch (err) {
-                showToast(friendlyUploadError(err), "error");
+                showToast("حدث خطأ: " + err.message, "error");
             } finally {
                 saveProfileBtn.disabled = false;
                 saveProfileBtn.textContent = originalText;
@@ -263,8 +241,6 @@ let state = {
     currentMeta: null,
     pdfDoc: null,
     currentPage: 1,
-    fitScreen: true,
-    zoom: 1,
     addError: '',
     saving: false,
     qDraft: { type: 'mcq', text: '', options: ['', ''], correct: 0, answer: '' },
@@ -386,7 +362,7 @@ async function handleAddLesson() {
 
     try {
         const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await loadPdf({ data: arrayBuffer.slice(0) });
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
         const pageCount = pdfDoc.numPages;
 
         const uploaded = await uploadToCloudinary(file);
@@ -405,21 +381,10 @@ async function handleAddLesson() {
         state.lessons = await fetchUserLessons();
         state.view = 'library';
     } catch (err) {
-        state.addError = friendlyUploadError(err);
+        state.addError = 'ما قدرت أرفع الملف: ' + err.message;
         state.view = 'add';
     }
     render();
-}
-
-function friendlyUploadError(err) {
-    const msg = err && err.message ? err.message : String(err);
-    if (/unknown api key/i.test(msg)) {
-        return 'ما قدرت أرفع الملف: "Unknown API key". هذا يعني إن Upload Preset في Cloudinary مو مضبوط كـ Unsigned. روح Cloudinary Dashboard → Settings → Upload → Upload presets، وتأكد إن Signing Mode = Unsigned للـ preset المستخدم.';
-    }
-    if (/invalid cloud_name|cloud_name/i.test(msg)) {
-        return 'ما قدرت أرفع الملف: اسم الـ Cloud Name في cloudinary.js غير صحيح، تأكد منه من لوحة Cloudinary.';
-    }
-    return 'ما قدرت أرفع الملف: ' + msg;
 }
 
 /* ---------------- Questions editor ---------------- */
@@ -534,11 +499,9 @@ async function openViewer(id) {
     root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يفتح الدرس...'])]));
 
     try {
-        const doc_ = await loadPdf({ url: state.currentMeta.pdfUrl });
+        const doc_ = await pdfjsLib.getDocument({ url: state.currentMeta.pdfUrl }).promise;
         state.pdfDoc = doc_;
         state.currentPage = 1;
-        state.fitScreen = true;
-        state.zoom = 1;
         state.view = 'viewer';
         render();
         drawCurrentPage();
@@ -560,12 +523,6 @@ function renderViewer() {
     ]));
 
     const stage = el('div', { class: 'page-stage' }, [el('canvas', { id: 'pdf-canvas' })]);
-    wrap.appendChild(el('div', { class: 'zoom-controls' }, [
-        el('button', { class: 'btn btn-ghost btn-sm' + (state.fitScreen ? ' active' : ''), onclick: () => { state.fitScreen = true; render(); drawCurrentPage(); } }, ['🖥 ملء الشاشة']),
-        el('button', { class: 'nav-btn btn-sm', onclick: () => { state.fitScreen = false; state.zoom = Math.max(0.5, state.zoom - 0.2); render(); drawCurrentPage(); } }, ['−']),
-        el('div', { class: 'count', style: 'min-width:52px;' }, [state.fitScreen ? 'ملائم' : Math.round(state.zoom * 100) + '%']),
-        el('button', { class: 'nav-btn btn-sm', onclick: () => { state.fitScreen = false; state.zoom = Math.min(3, state.zoom + 0.2); render(); drawCurrentPage(); } }, ['+']),
-    ]));
     const showDots = state.pdfDoc.numPages <= 25;
     let tabstrip = null;
     if (showDots) {
@@ -599,43 +556,38 @@ function goToPage(p) {
 
 async function drawCurrentPage() {
     const canvas = document.getElementById('pdf-canvas');
-    const stageEl = canvas ? canvas.closest('.page-stage') : null;
-    if (!canvas) return;
+    const stage = canvas ? canvas.closest('.page-stage') : null;
+    if (!canvas || !stage) return;
     const page = await state.pdfDoc.getPage(state.currentPage);
 
-    // نحسب المقياس: "ملء الشاشة" يحسب العرض المتاح فعلياً في الحاوية،
-    // وإلا نستخدم نسبة التكبير اليدوية (zoom).
+    // نحسب مقياس العرض بحيث تكبر الصفحة لتملأ المساحة المتاحة من الشاشة
     const baseViewport = page.getViewport({ scale: 1 });
-    let cssScale;
-    if (state.fitScreen) {
-        const available = stageEl
-            ? stageEl.clientWidth - 20
-            : Math.min(window.innerWidth - 40, 900);
-        cssScale = Math.max(0.4, available / baseViewport.width);
-    } else {
-        cssScale = state.zoom;
-    }
+    const stagePadding = 20; // 10px padding من كل جهة (.page-stage)
+    const availableWidth = Math.max(stage.clientWidth - stagePadding, 200);
+    const availableHeight = Math.max(window.innerHeight * 0.75, 300);
 
-    // نرسم على دقة الشاشة الفعلية (devicePixelRatio) عشان النص يطلع واضح
-    // وما يطلع مشوّش، مع إبقاء حجم العرض (CSS) مطابق لحجم الشاشة المطلوب.
+    let fitScale = availableWidth / baseViewport.width;
+    fitScale = Math.min(fitScale, availableHeight / baseViewport.height);
+    fitScale = Math.min(Math.max(fitScale, 0.5), 3.5);
+
     const dpr = window.devicePixelRatio || 1;
-    const renderViewport = page.getViewport({ scale: cssScale * dpr });
+    const viewport = page.getViewport({ scale: fitScale });
 
-    canvas.width = Math.floor(renderViewport.width);
-    canvas.height = Math.floor(renderViewport.height);
-    canvas.style.width = Math.floor(cssScale * baseViewport.width) + 'px';
-    canvas.style.height = Math.floor(cssScale * baseViewport.height) + 'px';
+    canvas.width = Math.floor(viewport.width * dpr);
+    canvas.height = Math.floor(viewport.height * dpr);
+    canvas.style.width = viewport.width + 'px';
+    canvas.style.height = viewport.height + 'px';
 
     const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    await page.render({ canvasContext: ctx, viewport }).promise;
 }
 
-// إعادة رسم الصفحة تلقائياً لو المستخدم في وضع "ملء الشاشة" وغيّر حجم النافذة
-let _resizeTimer = null;
+let resizeTimer = null;
 window.addEventListener('resize', () => {
-    if (state.view !== 'viewer' || !state.fitScreen) return;
-    clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(() => drawCurrentPage(), 150);
+    if (state.view !== 'viewer' || !state.pdfDoc) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => drawCurrentPage(), 200);
 });
 
 /* ---------------- Quiz ---------------- */
