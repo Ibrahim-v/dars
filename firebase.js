@@ -1,3 +1,4 @@
+// firebase.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getAuth,
@@ -22,6 +23,7 @@ import {
     where
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+// مفاتيح مشروع dars-7507b الخاصة بدفتر الدروس
 const firebaseConfig = {
     apiKey: "AIzaSyB5v-RoQJ-olPqL1r7WwrR4AqSzstH_8o0",
     authDomain: "dars-7507b.firebaseapp.com",
@@ -32,6 +34,7 @@ const firebaseConfig = {
     measurementId: "G-370D948ZK6"
 };
 
+// تهيئة خدمات Firebase (بدون Storage - نستخدم Cloudinary بدلها، شوف cloudinary.js)
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
