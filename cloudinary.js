@@ -1,12 +1,6 @@
-// cloudinary.js
-const CLOUD_NAME = "cnbellht";
-const UPLOAD_PRESET = "xbjd0mgs";
+const CLOUD_NAME = "xbjd0mgs";
+const UPLOAD_PRESET = "cnbellht";
 
-/**
- * يرفع أي ملف (PDF أو صورة) إلى Cloudinary ويرجع رابطه المباشر.
- * @param {File} file
- * @returns {Promise<{url:string, publicId:string, resourceType:string, bytes:number}>}
- */
 export async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append("file", file);
