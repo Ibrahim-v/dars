@@ -1,9 +1,6 @@
 // cloudinary.js
-// بديل مجاني لـ Firebase Storage: رفع غير موقّع (unsigned) مباشرة من المتصفح.
-// نفس فكرة imgbb اللي كانت مستخدمة في ErrorBook، بس هنا يدعم PDF أيضاً.
-
-const CLOUD_NAME = "xbjd0mgs";
-const UPLOAD_PRESET = "cnbellht";
+const CLOUD_NAME = "cnbellht";
+const UPLOAD_PRESET = "xbjd0mgs";
 
 /**
  * يرفع أي ملف (PDF أو صورة) إلى Cloudinary ويرجع رابطه المباشر.
