@@ -2,8 +2,8 @@
 // بديل مجاني لـ Firebase Storage: رفع غير موقّع (unsigned) مباشرة من المتصفح.
 // نفس فكرة imgbb اللي كانت مستخدمة في ErrorBook، بس هنا يدعم PDF أيضاً.
 
-const CLOUD_NAME = "xbjd0mgs";
-const UPLOAD_PRESET = "cnbellht";
+const CLOUD_NAME = "cnbellht";
+const UPLOAD_PRESET = "xbjd0mgs";
 
 /**
  * يرفع أي ملف (PDF أو صورة) إلى Cloudinary ويرجع رابطه المباشر.
@@ -32,20 +32,4 @@ export async function uploadToCloudinary(file) {
         resourceType: data.resource_type,
         bytes: data.bytes
     };
-}
-
-/**
- * يبني رابط مصغّر (thumbnail) من رابط Cloudinary أصلي عن طريق حقن
- * تحويلات (w/h/crop/quality/format) داخل الرابط، بدل ما نحمّل الصورة
- * الأصلية بحجمها الكامل بس عشان نعرضها بمقاس صغير (مثلاً الأفاتار).
- * هذا يخفف حجم التحميل بشكل كبير ويسرّع فتح الموقع.
- * @param {string} url رابط Cloudinary (secure_url)
- * @param {{w?:number,h?:number}} opts
- */
-export function cldThumb(url, opts = {}) {
-    if (!url || url.indexOf("res.cloudinary.com") === -1) return url;
-    const w = opts.w || 96;
-    const h = opts.h || 96;
-    const transform = `f_auto,q_auto,w_${w},h_${h},c_fill,g_auto`;
-    return url.replace("/upload/", `/upload/${transform}/`);
 }
