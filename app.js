@@ -660,8 +660,18 @@ async function deleteLesson(id) {
 async function bootLibrary() {
     state.view = 'loading';
     render();
-    state.lessons = await fetchUserLessons();
-    state.view = 'library';
+    try {
+        state.lessons = await fetchUserLessons();
+        state.view = 'library';
+    } catch (err) {
+        console.error(err);
+        state.lessons = [];
+        state.view = 'library';
+        const msg = (err && err.code === 'permission-denied')
+            ? 'ماكو صلاحية وصول لقاعدة البيانات. تأكد إنك ضفت ونشرت (Publish) قواعد الأمان في Firestore Database → Rules.'
+            : 'صار خطأ أثناء تحميل الدروس: ' + (err && err.message ? err.message : err);
+        showToast(msg, 'error');
+    }
     render();
 }
 
