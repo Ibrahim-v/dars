@@ -139,13 +139,11 @@ body{
 
 /* ---------- viewer ---------- */
 .viewer-wrap{display:flex; justify-content:center; gap:14px; align-items:flex-start;}
-.page-stage{background:#fff; border-radius:3px; box-shadow:var(--shadow); padding:10px; position:relative; max-width:100%; overflow-x:auto; min-width:0; flex:1;}
-.page-stage canvas{display:block; border-radius:2px;}
+.page-stage{background:#fff; border-radius:3px; box-shadow:var(--shadow); padding:10px; position:relative; max-width:100%; flex:1 1 auto; min-width:0; display:flex; justify-content:center;}
+.page-stage canvas{display:block; max-width:100%; height:auto; border-radius:2px;}
 .tabstrip{display:flex; flex-direction:column; gap:5px; padding-top:20px; max-height:70vh; overflow-y:auto;}
 .tabstrip .dot{width:14px; height:14px; border-radius:50%; border:2px solid var(--line); cursor:pointer; background:#fff; flex-shrink:0;}
 .tabstrip .dot.current{background:var(--teal); border-color:var(--teal);}
-.zoom-controls{display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;}
-.zoom-controls .btn.active{background:var(--teal); color:#fff; border-color:var(--teal);}
 .viewer-controls{display:flex; align-items:center; justify-content:center; gap:16px; margin-top:18px;}
 .viewer-controls .count{font-weight:600; color:var(--ink-soft); font-size:14px; min-width:70px; text-align:center;}
 .nav-btn{width:44px; height:44px; border-radius:50%; border:1.5px solid var(--line); background:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--ink);}
