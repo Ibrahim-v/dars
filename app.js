@@ -513,13 +513,16 @@ async function openViewer(id) {
 }
 
 function renderViewer() {
-    const wrap = el('div');
+    const wrap = el('div', { id: 'viewer-root' });
     wrap.appendChild(el('div', { class: 'top-actions' }, [
         el('div', { class: 'breadcrumb', onclick: () => { state.view = 'library'; render(); } }, ['→ رجوع للمكتبة']),
     ]));
     wrap.appendChild(el('div', { class: 'viewer-top' }, [
         el('h2', {}, [state.currentMeta.title]),
-        el('button', { class: 'btn btn-ghost btn-sm', onclick: () => openQuestions(state.currentId) }, ['تعديل الأسئلة'])
+        el('div', { style: 'display:flex; gap:8px;' }, [
+            el('button', { class: 'btn btn-ghost btn-sm', onclick: toggleFullscreen }, [isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة']),
+            el('button', { class: 'btn btn-ghost btn-sm', onclick: () => openQuestions(state.currentId) }, ['تعديل الأسئلة'])
+        ])
     ]));
 
     const stage = el('div', { class: 'page-stage' }, [el('canvas', { id: 'pdf-canvas' })]);
@@ -554,6 +557,30 @@ function goToPage(p) {
     drawCurrentPage();
 }
 
+function isFullscreenActive() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function toggleFullscreen() {
+    const target = document.getElementById('viewer-root');
+    if (!target) return;
+    if (!isFullscreenActive()) {
+        const req = target.requestFullscreen || target.webkitRequestFullscreen;
+        if (req) req.call(target);
+    } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+    }
+}
+
+function handleFullscreenChange() {
+    if (state.view !== 'viewer') return;
+    render();
+    drawCurrentPage();
+}
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
 async function drawCurrentPage() {
     const canvas = document.getElementById('pdf-canvas');
     const stage = canvas ? canvas.closest('.page-stage') : null;
@@ -564,7 +591,9 @@ async function drawCurrentPage() {
     const baseViewport = page.getViewport({ scale: 1 });
     const stagePadding = 20; // 10px padding من كل جهة (.page-stage)
     const availableWidth = Math.max(stage.clientWidth - stagePadding, 200);
-    const availableHeight = Math.max(window.innerHeight * 0.75, 300);
+    const availableHeight = isFullscreenActive()
+        ? Math.max(window.innerHeight - 150, 300)
+        : Math.max(window.innerHeight * 0.75, 300);
 
     let fitScale = availableWidth / baseViewport.width;
     fitScale = Math.min(fitScale, availableHeight / baseViewport.height);
