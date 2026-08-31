@@ -3,22 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>درس</title>
+<title>دفتر الدروس</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://cdnjs.cloudflare.com">
-<link rel="preconnect" href="https://res.cloudinary.com">
-<link rel="preconnect" href="https://firestore.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
 <div class="app">
   <div class="topbar">
     <div>
-      <h1>درس<span class="stamp">PDF</span></h1>
+      <h1>دفتر الدروس <span class="stamp">PDF</span></h1>
+      <p>ارفع دروسك، تصفّحها صفحة صفحة، وحلّ أسئلتك بعدها</p>
     </div>
     <div class="profile-wrap">
       <button id="profile-avatar-btn" class="avatar-btn" type="button">
