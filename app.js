@@ -245,6 +245,7 @@ let state = {
     addMode: 'pdf',
     imgQueue: [],
     imgStep: 'select',
+    imgPreview: null,
     saving: false,
     qDraft: { type: 'mcq', text: '', options: ['', ''], correct: 0, answer: '' },
     quizAnswers: {},
@@ -263,6 +264,15 @@ function render() {
     else if (state.view === 'questions') r.appendChild(renderQuestions());
     else if (state.view === 'viewer') r.appendChild(renderViewer());
     else if (state.view === 'quiz') r.appendChild(renderQuiz());
+
+    if (state.imgPreview) {
+        r.appendChild(el('div', { class: 'auth-overlay', style: 'z-index:300;', onclick: () => { state.imgPreview = null; render(); } }, [
+            el('div', { style: 'max-width:90vw; max-height:90vh;', onclick: (e) => e.stopPropagation() }, [
+                el('img', { src: state.imgPreview, style: 'max-width:90vw; max-height:80vh; display:block; border-radius:8px; box-shadow:var(--shadow);' }),
+                el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:10px; width:100%; background:var(--paper-card);', onclick: () => { state.imgPreview = null; render(); } }, ['إغلاق'])
+            ])
+        ]));
+    }
 }
 
 function el(tag, attrs = {}, children = []) {
@@ -368,7 +378,7 @@ function renderAdd() {
         state.imgQueue.forEach((img, idx) => {
             list.appendChild(el('div', { style: 'display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px 10px;' }, [
                 el('div', { style: 'font-size:12px;color:var(--ink-faint);min-width:20px;text-align:center;font-weight:700;' }, [String(idx + 1)]),
-                el('img', { src: img.dataUrl, style: 'width:56px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--line);flex-shrink:0;' }),
+                el('img', { src: img.dataUrl, style: 'width:56px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--line);flex-shrink:0;cursor:pointer;', onclick: () => { state.imgPreview = img.dataUrl; render(); } }),
                 el('div', { style: 'flex:1;font-size:12.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, [img.name]),
                 el('button', { class: 'btn btn-ghost btn-sm', disabled: idx === 0 ? 'disabled' : undefined, onclick: () => moveImage(idx, -1) }, ['▲']),
                 el('button', { class: 'btn btn-ghost btn-sm', disabled: idx === state.imgQueue.length - 1 ? 'disabled' : undefined, onclick: () => moveImage(idx, 1) }, ['▼']),
@@ -411,6 +421,37 @@ function getImageSize(dataUrl) {
     });
 }
 
+// يضغط/يصغّر الصورة (canvas) قبل إدخالها بالـ PDF، عشان حجم الملف النهائي ما يصير كبير جداً ويفشل رفعه
+function compressImageFile(file, maxDim = 1600, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+                const scale = maxDim / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+                URL.revokeObjectURL(url);
+                if (!blob) { reject(new Error('تعذّر ضغط الصورة')); return; }
+                const newName = file.name.replace(/\.\w+$/, '') + '.jpg';
+                resolve(new File([blob], newName, { type: 'image/jpeg' }));
+            }, 'image/jpeg', quality);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('صورة غير صالحة')); };
+        img.src = url;
+    });
+}
+
 // يفك أي ملفات ZIP مختارة (زي تصدير Canva "Download all pages") ويجمع كل الصور الناتجة + المختارة مباشرة، بترتيب أبجدي/رقمي مبدئي
 async function handlePrepareImages() {
     const input = document.getElementById('lesson-images-input');
@@ -448,9 +489,9 @@ async function handlePrepareImages() {
 
         const queue = [];
         for (let i = 0; i < imageFiles.length; i++) {
-            const file = imageFiles[i];
-            const dataUrl = await readFileAsDataURL(file);
-            queue.push({ id: 'img' + i + '_' + Date.now(), file, dataUrl, name: file.name });
+            const compressed = await compressImageFile(imageFiles[i]);
+            const dataUrl = await readFileAsDataURL(compressed);
+            queue.push({ id: 'img' + i + '_' + Date.now(), file: compressed, dataUrl, name: imageFiles[i].name });
         }
         state.imgQueue = queue;
         state.imgStep = 'reorder';
