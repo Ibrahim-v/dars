@@ -460,7 +460,6 @@ function compressImageFile(file, maxDim = 1600, quality = 0.82) {
     });
 }
 
-// يفك أي ملفات ZIP مختارة (زي تصدير Canva "Download all pages") ويجمع كل الصور الناتجة + المختارة مباشرة، بترتيب أبجدي/رقمي مبدئي
 // يفك أي ملفات ZIP ويجمعها مع الصور المختارة مباشرة، مرتبة أبجدياً/رقمياً
 async function extractImageFilesFromRaw(rawFiles) {
     if (typeof JSZip === 'undefined') {
@@ -485,8 +484,6 @@ async function extractImageFilesFromRaw(rawFiles) {
     }
     imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     return imageFiles;
-}
-    render();
 }
 
 // يضيف صور جديدة لنفس قائمة الترتيب الحالية بدل ما يستبدلها (يُستخدم بخطوة الترتيب لإضافة صور زيادة)
