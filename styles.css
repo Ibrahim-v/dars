@@ -152,7 +152,19 @@ body{
 .viewer-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;}
 .viewer-top h2{font-family:'Aref Ruqaa', serif; font-size:24px; margin:0;}
 
-/* ---------------- fullscreen viewer ---------------- */
+/* ---------- pptx viewer ---------- */
+.pptx-frame-wrap{width:100%; max-width:960px; margin:0 auto; box-shadow:var(--shadow); border-radius:6px; overflow:hidden; background:#fff;}
+.pptx-frame{width:100%; aspect-ratio:16/9; display:block; border:none;}
+#pdf-fullscreen-target.pptx-frame-wrap:fullscreen,
+#pdf-fullscreen-target.pptx-frame-wrap:-webkit-full-screen{
+  max-width:none; display:flex; align-items:center; justify-content:center; background:#000;
+}
+#pdf-fullscreen-target.pptx-frame-wrap:fullscreen .pptx-frame,
+#pdf-fullscreen-target.pptx-frame-wrap:-webkit-full-screen .pptx-frame{
+  width:100%; height:100%; aspect-ratio:auto;
+}
+
+/* ---------- fullscreen viewer (pdf) ---------- */
 #pdf-fullscreen-target:fullscreen,
 #pdf-fullscreen-target:-webkit-full-screen{
   background:var(--paper);
