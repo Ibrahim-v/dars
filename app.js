@@ -246,6 +246,8 @@ let state = {
     imgQueue: [],
     imgStep: 'select',
     imgPreview: null,
+    editingLessonId: null,
+    editTitle: '',
     saving: false,
     qDraft: { type: 'mcq', text: '', options: ['', ''], correct: 0, answer: '' },
     quizAnswers: {},
@@ -324,8 +326,9 @@ function renderLibrary() {
             el('div', { class: 'row' }, [
                 el('button', { class: 'btn btn-primary btn-sm', onclick: () => openViewer(l.id) }, ['فتح الدرس']),
                 el('button', { class: 'btn btn-ghost btn-sm', onclick: () => openQuestions(l.id) }, ['الأسئلة']),
+                !isPptx ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => openEditImages(l.id) }, ['ترتيب/إضافة صور']) : null,
                 el('button', { class: 'btn btn-danger btn-sm', onclick: () => deleteLesson(l.id) }, ['حذف']),
-            ])
+            ].filter(Boolean))
         ]));
     });
     grid.appendChild(el('div', { class: 'card add', onclick: () => openAdd() }, [
@@ -338,31 +341,34 @@ function renderLibrary() {
 
 /* ---------------- Add lesson ---------------- */
 function renderAdd() {
+    const isEditing = !!state.editingLessonId;
     const wrap = el('div');
     wrap.appendChild(el('div', { class: 'top-actions' }, [
         el('div', { class: 'breadcrumb', onclick: () => { state.view = 'library'; render(); } }, ['→ رجوع للمكتبة']),
     ]));
-    const panel = el('div', { class: 'panel' }, [el('h2', {}, ['إضافة درس جديد'])]);
+    const panel = el('div', { class: 'panel' }, [el('h2', {}, [isEditing ? 'تعديل صور الدرس' : 'إضافة درس جديد'])]);
 
     if (state.addError) panel.appendChild(el('div', { class: 'banner error' }, [state.addError]));
 
     panel.appendChild(el('div', { class: 'field' }, [
         el('label', {}, ['عنوان الدرس']),
-        el('input', { type: 'text', id: 'lesson-title-input', placeholder: 'مثال: الدرس الأول - المعادلات' })
+        el('input', { type: 'text', id: 'lesson-title-input', placeholder: 'مثال: الدرس الأول - المعادلات', value: state.editTitle || undefined })
     ]));
 
-    panel.appendChild(el('div', { class: 'qtype-toggle' }, [
-        el('button', { type: 'button', class: state.addMode === 'pdf' ? 'active' : '', onclick: () => { state.addMode = 'pdf'; render(); } }, ['ملف PDF']),
-        el('button', { type: 'button', class: state.addMode === 'pptx' ? 'active' : '', onclick: () => { state.addMode = 'pptx'; render(); } }, ['ملف PowerPoint (PPTX)']),
-        el('button', { type: 'button', class: state.addMode === 'images' ? 'active' : '', onclick: () => { state.addMode = 'images'; render(); } }, ['صور شرائح']),
-    ]));
+    if (!isEditing) {
+        panel.appendChild(el('div', { class: 'qtype-toggle' }, [
+            el('button', { type: 'button', class: state.addMode === 'pdf' ? 'active' : '', onclick: () => { state.addMode = 'pdf'; render(); } }, ['ملف PDF']),
+            el('button', { type: 'button', class: state.addMode === 'pptx' ? 'active' : '', onclick: () => { state.addMode = 'pptx'; render(); } }, ['ملف PowerPoint (PPTX)']),
+            el('button', { type: 'button', class: state.addMode === 'images' ? 'active' : '', onclick: () => { state.addMode = 'images'; render(); } }, ['صور شرائح']),
+        ]));
+    }
 
-    if (state.addMode === 'pdf') {
+    if (state.addMode === 'pdf' && !isEditing) {
         panel.appendChild(el('div', { class: 'field' }, [
             el('label', {}, ['ملف PDF']),
             el('input', { type: 'file', accept: 'application/pdf', id: 'lesson-file-input' })
         ]));
-    } else if (state.addMode === 'pptx') {
+    } else if (state.addMode === 'pptx' && !isEditing) {
         panel.appendChild(el('div', { class: 'banner info' }, [
             'يترفع ملف الـ PowerPoint زي ما هو، وينعرض مباشرة داخل الموقع (بدون تحويله لـ PDF) — هذا يتفادى مشكلة النص العربي المعكوس اللي تصير مع بعض ملفات Canva المصدَّرة PDF.'
         ]));
@@ -372,7 +378,7 @@ function renderAdd() {
         ]));
     } else if (state.imgStep === 'reorder' && state.imgQueue.length > 0) {
         panel.appendChild(el('div', { class: 'banner info' }, [
-            `رتّب الصور بالترتيب الصح باستخدام الأسهم، بعدها اضغط "حفظ الدرس" تحت. (${state.imgQueue.length} صورة)`
+            `رتّب الصور بالأسهم، احذف اللي ما تبيه، وضيف صور زيادة لو احتجت. بعدها اضغط "حفظ الدرس". (${state.imgQueue.length} صورة)`
         ]));
         const list = el('div', { style: 'display:flex; flex-direction:column; gap:8px; margin-bottom:14px;' });
         state.imgQueue.forEach((img, idx) => {
@@ -386,7 +392,13 @@ function renderAdd() {
             ]));
         });
         panel.appendChild(list);
-        panel.appendChild(el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:10px;', onclick: () => { state.imgStep = 'select'; state.imgQueue = []; render(); } }, ['🔙 رجوع لاختيار صور ثانية']));
+        panel.appendChild(el('div', { class: 'field' }, [
+            el('label', {}, ['+ إضافة صور جديدة لنفس الدرس']),
+            el('input', { type: 'file', accept: 'image/*,.zip,application/zip,application/x-zip-compressed', id: 'lesson-append-images-input', multiple: 'multiple', onchange: (e) => appendMoreImages(e.target) })
+        ]));
+        if (!isEditing) {
+            panel.appendChild(el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:10px;', onclick: () => { state.imgStep = 'select'; state.imgQueue = []; render(); } }, ['🔙 رجوع لاختيار صور ثانية']));
+        }
     } else {
         panel.appendChild(el('div', { class: 'banner info' }, [
             'صدّر شرائحك من Canva كصور (Share ← Download ← PNG، فعّل "Download all pages") — بينزل عندك ملف ZIP فيه كل الصور. اختر نفس ملف الـ ZIP هنا مباشرة (أو صور منفردة)، وبترتبهم بعدين قبل الحفظ.'
@@ -398,7 +410,7 @@ function renderAdd() {
         panel.appendChild(el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:10px;', onclick: handlePrepareImages }, ['تجهيز الصور →']));
     }
 
-    panel.appendChild(el('button', { class: 'btn btn-primary', style: 'margin-top:10px;', onclick: handleAddLesson }, ['حفظ الدرس']));
+    panel.appendChild(el('button', { class: 'btn btn-primary', style: 'margin-top:10px;', onclick: handleAddLesson }, [isEditing ? 'حفظ التعديلات' : 'حفظ الدرس']));
     wrap.appendChild(panel);
     return wrap;
 }
@@ -453,6 +465,32 @@ function compressImageFile(file, maxDim = 1600, quality = 0.82) {
 }
 
 // يفك أي ملفات ZIP مختارة (زي تصدير Canva "Download all pages") ويجمع كل الصور الناتجة + المختارة مباشرة، بترتيب أبجدي/رقمي مبدئي
+// يفك أي ملفات ZIP ويجمعها مع الصور المختارة مباشرة، مرتبة أبجدياً/رقمياً
+async function extractImageFilesFromRaw(rawFiles) {
+    if (typeof JSZip === 'undefined') {
+        throw new Error('مكتبة فك ضغط الـ ZIP (JSZip) ما تحمّلت — تأكد إن index.html محدّث وفيه سكربت jszip، وحدّث الصفحة.');
+    }
+    let imageFiles = [];
+    for (const f of rawFiles) {
+        const isZip = f.name.toLowerCase().endsWith('.zip') || /zip/i.test(f.type);
+        if (isZip) {
+            const zip = await JSZip.loadAsync(f);
+            const entries = Object.values(zip.files).filter(e => !e.dir && /\.(png|jpe?g|webp)$/i.test(e.name));
+            entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            for (const entry of entries) {
+                const blob = await entry.async('blob');
+                const nameOnly = entry.name.split('/').pop();
+                const mime = /\.png$/i.test(nameOnly) ? 'image/png' : 'image/jpeg';
+                imageFiles.push(new File([blob], nameOnly, { type: mime }));
+            }
+        } else if (f.type.startsWith('image/')) {
+            imageFiles.push(f);
+        }
+    }
+    imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    return imageFiles;
+}
+
 async function handlePrepareImages() {
     const input = document.getElementById('lesson-images-input');
     const rawFiles = Array.from((input && input.files) || []);
@@ -462,30 +500,10 @@ async function handlePrepareImages() {
     root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يفك الملفات ويجهّز الصور...'])]));
 
     try {
-        if (typeof JSZip === 'undefined') {
-            throw new Error('مكتبة فك ضغط الـ ZIP (JSZip) ما تحمّلت — تأكد إن index.html محدّث وفيه سكربت jszip، وحدّث الصفحة.');
-        }
-        let imageFiles = [];
-        for (const f of rawFiles) {
-            const isZip = f.name.toLowerCase().endsWith('.zip') || /zip/i.test(f.type);
-            if (isZip) {
-                const zip = await JSZip.loadAsync(f);
-                const entries = Object.values(zip.files).filter(e => !e.dir && /\.(png|jpe?g|webp)$/i.test(e.name));
-                entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-                for (const entry of entries) {
-                    const blob = await entry.async('blob');
-                    const nameOnly = entry.name.split('/').pop();
-                    const mime = /\.png$/i.test(nameOnly) ? 'image/png' : 'image/jpeg';
-                    imageFiles.push(new File([blob], nameOnly, { type: mime }));
-                }
-            } else if (f.type.startsWith('image/')) {
-                imageFiles.push(f);
-            }
-        }
+        const imageFiles = await extractImageFilesFromRaw(rawFiles);
         if (imageFiles.length === 0) {
             throw new Error('ما لقيت صور صالحة داخل الملفات المختارة.');
         }
-        imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
         const queue = [];
         for (let i = 0; i < imageFiles.length; i++) {
@@ -499,6 +517,32 @@ async function handlePrepareImages() {
     } catch (err) {
         state.addError = 'ما قدرت أجهّز الصور: ' + err.message;
         state.imgStep = 'select';
+    }
+    state.view = 'add';
+    render();
+}
+
+// يضيف صور جديدة لنفس قائمة الترتيب الحالية بدل ما يستبدلها (يُستخدم بخطوة الترتيب لإضافة صور زيادة)
+async function appendMoreImages(inputEl) {
+    const rawFiles = Array.from((inputEl && inputEl.files) || []);
+    if (rawFiles.length === 0) return;
+
+    root().innerHTML = '';
+    root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يجهّز الصور الجديدة...'])]));
+
+    try {
+        const imageFiles = await extractImageFilesFromRaw(rawFiles);
+        if (imageFiles.length === 0) {
+            throw new Error('ما لقيت صور صالحة داخل الملفات المختارة.');
+        }
+        for (let i = 0; i < imageFiles.length; i++) {
+            const compressed = await compressImageFile(imageFiles[i]);
+            const dataUrl = await readFileAsDataURL(compressed);
+            state.imgQueue.push({ id: 'imgmore' + i + '_' + Date.now(), file: compressed, dataUrl, name: imageFiles[i].name });
+        }
+        state.addError = '';
+    } catch (err) {
+        state.addError = 'ما قدرت أضيف الصور الجديدة: ' + err.message;
     }
     state.view = 'add';
     render();
@@ -601,22 +645,35 @@ async function handleAddLesson() {
 
         const uploaded = await uploadToCloudinary(file);
 
-        await addDoc(collection(db, "lessons"), {
-            userId: currentUser.uid,
-            title,
-            fileType,
-            pageCount,
-            pdfUrl: uploaded.url,
-            publicId: uploaded.publicId,
-            questions: [],
-            createdAtMs: Date.now(),
-        });
+        if (state.editingLessonId) {
+            await updateDoc(doc(db, "lessons", state.editingLessonId), {
+                title,
+                fileType,
+                pageCount,
+                pdfUrl: uploaded.url,
+                publicId: uploaded.publicId,
+            });
+            showToast("تم حفظ التعديلات");
+        } else {
+            await addDoc(collection(db, "lessons"), {
+                userId: currentUser.uid,
+                title,
+                fileType,
+                pageCount,
+                pdfUrl: uploaded.url,
+                publicId: uploaded.publicId,
+                questions: [],
+                createdAtMs: Date.now(),
+            });
+            showToast("تم رفع الدرس بنجاح");
+        }
 
-        showToast("تم رفع الدرس بنجاح");
         state.lessons = await fetchUserLessons();
         state.view = 'library';
         state.imgQueue = [];
         state.imgStep = 'select';
+        state.editingLessonId = null;
+        state.editTitle = '';
     } catch (err) {
         state.addError = 'ما قدرت أرفع الملف: ' + err.message;
         state.view = 'add';
@@ -1015,7 +1072,47 @@ function openAdd() {
     state.addMode = 'pdf';
     state.imgQueue = [];
     state.imgStep = 'select';
+    state.editingLessonId = null;
+    state.editTitle = '';
     state.view = 'add';
+    render();
+}
+
+// يفك درس PDF محفوظ سابقاً إلى صور (صفحة = صورة) عشان يصير قابل لإعادة الترتيب أو إضافة صور له
+async function openEditImages(id) {
+    state.currentId = id;
+    state.currentMeta = state.lessons.find(l => l.id === id);
+    if (!state.currentMeta) return;
+
+    root().innerHTML = '';
+    root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يجهّز صفحات الدرس للتعديل...'])]));
+
+    try {
+        const pdfDoc = await pdfjsLib.getDocument({ url: state.currentMeta.pdfUrl }).promise;
+        const queue = [];
+        for (let p = 1; p <= pdfDoc.numPages; p++) {
+            const page = await pdfDoc.getPage(p);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], `page-${p}.jpg`, { type: 'image/jpeg' });
+            queue.push({ id: 'existing' + p, file, dataUrl, name: `صفحة ${p}` });
+        }
+        state.imgQueue = queue;
+        state.imgStep = 'reorder';
+        state.addMode = 'images';
+        state.editingLessonId = id;
+        state.editTitle = state.currentMeta.title;
+        state.addError = '';
+        state.view = 'add';
+    } catch (err) {
+        showToast('ما قدرت أجهّز صفحات الدرس للتعديل: ' + err.message, 'error');
+        state.view = 'library';
+    }
     render();
 }
 
