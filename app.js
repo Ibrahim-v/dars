@@ -514,7 +514,7 @@ async function openViewer(id) {
 }
 
 function renderViewer() {
-    const wrap = el('div', { id: 'viewer-root' });
+    const wrap = el('div');
     wrap.appendChild(el('div', { class: 'top-actions' }, [
         el('div', { class: 'breadcrumb', onclick: () => { state.view = 'library'; render(); } }, ['→ رجوع للمكتبة']),
     ]));
@@ -535,14 +535,21 @@ function renderViewer() {
             tabstrip.appendChild(el('div', { class: 'dot' + (p === state.currentPage ? ' current' : ''), onclick: () => goToPage(p) }));
         }
     }
-    wrap.appendChild(el('div', { class: 'viewer-wrap' }, [tabstrip, stage].filter(Boolean)));
 
     const isLast = state.currentPage === state.pdfDoc.numPages;
-    wrap.appendChild(el('div', { class: 'viewer-controls' }, [
+    const controls = el('div', { class: 'viewer-controls' }, [
         el('button', { class: 'nav-btn', disabled: state.currentPage <= 1 ? 'disabled' : undefined, onclick: () => goToPage(state.currentPage - 1) }, ['›']),
         el('div', { class: 'count' }, [`${state.currentPage} / ${state.pdfDoc.numPages}`]),
         el('button', { class: 'nav-btn', onclick: () => isLast ? goToQuiz() : goToPage(state.currentPage + 1) }, [isLast ? '✓' : '‹']),
-    ]));
+    ]);
+
+    // الملف نفسه (الصفحة + التنقل بين الصفحات) هو اللي يدخل ملء الشاشة، مو باقي عناصر الصفحة
+    const fsTarget = el('div', { id: 'pdf-fullscreen-target' }, [
+        el('div', { class: 'viewer-wrap' }, [tabstrip, stage].filter(Boolean)),
+        controls
+    ]);
+    wrap.appendChild(fsTarget);
+
     if (isLast) {
         wrap.appendChild(el('div', { style: 'text-align:center;margin-top:10px;' }, [
             el('button', { class: 'btn btn-primary btn-sm', onclick: goToQuiz }, ['الانتقال للأسئلة ←'])
@@ -563,7 +570,7 @@ function isFullscreenActive() {
 }
 
 function toggleFullscreen() {
-    const target = document.getElementById('viewer-root');
+    const target = document.getElementById('pdf-fullscreen-target');
     if (!target) return;
     if (!isFullscreenActive()) {
         const req = target.requestFullscreen || target.webkitRequestFullscreen;
