@@ -916,7 +916,7 @@ async function drawCurrentPage() {
     const stagePadding = 20; // 10px padding من كل جهة (.page-stage)
     const availableWidth = Math.max(stage.clientWidth - stagePadding, 200);
     const availableHeight = isFullscreenActive()
-        ? Math.max(window.innerHeight - 150, 300)
+        ? Math.max(window.innerHeight - 48, 300)
         : Math.max(window.innerHeight * 0.75, 300);
 
     let fitScale = availableWidth / baseViewport.width;
