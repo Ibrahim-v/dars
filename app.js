@@ -756,6 +756,25 @@ async function openViewer(id) {
     }
 }
 
+function buildPdfFsChildren() {
+    const stage = el('div', { class: 'page-stage' }, [el('canvas', { id: 'pdf-canvas' })]);
+    const showDots = state.pdfDoc.numPages <= 25;
+    let tabstrip = null;
+    if (showDots) {
+        tabstrip = el('div', { class: 'tabstrip' });
+        for (let p = 1; p <= state.pdfDoc.numPages; p++) {
+            tabstrip.appendChild(el('div', { class: 'dot' + (p === state.currentPage ? ' current' : ''), onclick: () => goToPage(p) }));
+        }
+    }
+    const isLast = state.currentPage === state.pdfDoc.numPages;
+    const controls = el('div', { class: 'viewer-controls' }, [
+        el('button', { class: 'nav-btn', disabled: state.currentPage <= 1 ? 'disabled' : undefined, onclick: () => goToPage(state.currentPage - 1) }, ['›']),
+        el('div', { class: 'count' }, [`${state.currentPage} / ${state.pdfDoc.numPages}`]),
+        el('button', { class: 'nav-btn', onclick: () => isLast ? goToQuiz() : goToPage(state.currentPage + 1) }, [isLast ? '✓' : '‹']),
+    ]);
+    return [el('div', { class: 'viewer-wrap' }, [tabstrip, stage].filter(Boolean)), controls];
+}
+
 function renderViewer() {
     const wrap = el('div');
     wrap.appendChild(el('div', { class: 'top-actions' }, [
@@ -786,30 +805,11 @@ function renderViewer() {
         ])
     ]));
 
-    const stage = el('div', { class: 'page-stage' }, [el('canvas', { id: 'pdf-canvas' })]);
-    const showDots = state.pdfDoc.numPages <= 25;
-    let tabstrip = null;
-    if (showDots) {
-        tabstrip = el('div', { class: 'tabstrip' });
-        for (let p = 1; p <= state.pdfDoc.numPages; p++) {
-            tabstrip.appendChild(el('div', { class: 'dot' + (p === state.currentPage ? ' current' : ''), onclick: () => goToPage(p) }));
-        }
-    }
-
-    const isLast = state.currentPage === state.pdfDoc.numPages;
-    const controls = el('div', { class: 'viewer-controls' }, [
-        el('button', { class: 'nav-btn', disabled: state.currentPage <= 1 ? 'disabled' : undefined, onclick: () => goToPage(state.currentPage - 1) }, ['›']),
-        el('div', { class: 'count' }, [`${state.currentPage} / ${state.pdfDoc.numPages}`]),
-        el('button', { class: 'nav-btn', onclick: () => isLast ? goToQuiz() : goToPage(state.currentPage + 1) }, [isLast ? '✓' : '‹']),
-    ]);
-
     // الملف نفسه (الصفحة + التنقل بين الصفحات) هو اللي يدخل ملء الشاشة، مو باقي عناصر الصفحة
-    const fsTarget = el('div', { id: 'pdf-fullscreen-target' }, [
-        el('div', { class: 'viewer-wrap' }, [tabstrip, stage].filter(Boolean)),
-        controls
-    ]);
+    const fsTarget = el('div', { id: 'pdf-fullscreen-target' }, buildPdfFsChildren());
     wrap.appendChild(fsTarget);
 
+    const isLast = state.currentPage === state.pdfDoc.numPages;
     if (isLast) {
         wrap.appendChild(el('div', { style: 'text-align:center;margin-top:10px;' }, [
             el('button', { class: 'btn btn-primary btn-sm', onclick: goToQuiz }, ['الانتقال للأسئلة ←'])
@@ -821,7 +821,16 @@ function renderViewer() {
 function goToPage(p) {
     if (p < 1 || p > state.pdfDoc.numPages) return;
     state.currentPage = p;
-    render();
+    if (isFullscreenActive()) {
+        // نحدّث محتوى صندوق ملء الشاشة بمكانه بدون ما نستبدل العنصر نفسه، وإلا المتصفح يطلع تلقائياً من ملء الشاشة
+        const fsTarget = document.getElementById('pdf-fullscreen-target');
+        if (fsTarget) {
+            fsTarget.innerHTML = '';
+            buildPdfFsChildren().forEach(child => fsTarget.appendChild(child));
+        }
+    } else {
+        render();
+    }
     drawCurrentPage();
 }
 
@@ -845,7 +854,8 @@ function handleFullscreenChange() {
     if (state.view !== 'viewer') return;
     const btn = document.getElementById('fullscreen-btn');
     if (btn) btn.textContent = isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة';
-    drawCurrentPage();
+    // ننتظر لين يخلص المتصفح فعلياً من تطبيق تخطيط ملء الشاشة قبل ما نقيس الأبعاد، وإلا نقيس القياس القديم الصغير
+    requestAnimationFrame(() => requestAnimationFrame(() => drawCurrentPage()));
 }
 document.addEventListener('fullscreenchange', handleFullscreenChange);
 document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
