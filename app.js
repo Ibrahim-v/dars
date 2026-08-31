@@ -831,7 +831,7 @@ function renderViewer() {
             el('h2', {}, [state.currentMeta.title]),
             el('button', { id: 'fullscreen-btn', class: 'btn btn-ghost btn-sm', onclick: toggleFullscreen }, [isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة']),
         ]));
-        const officeSrc = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(state.currentMeta.pdfUrl);
+        const officeSrc = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(state.currentMeta.pdfUrl) + '&wdAr=1.7777777777777777&Embed=1';
         const fsTarget = el('div', { id: 'pdf-fullscreen-target', class: 'pptx-frame-wrap' }, [
             el('iframe', { class: 'pptx-frame', src: officeSrc, frameborder: '0' })
         ]);
