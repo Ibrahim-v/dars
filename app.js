@@ -245,6 +245,7 @@ let state = {
     saving: false,
     qDraft: { type: 'mcq', text: '', options: ['', ''], correct: 0, answer: '' },
     quizAnswers: {},
+    quizIndex: 0,
 };
 
 const root = () => document.getElementById('root');
@@ -520,7 +521,7 @@ function renderViewer() {
     wrap.appendChild(el('div', { class: 'viewer-top' }, [
         el('h2', {}, [state.currentMeta.title]),
         el('div', { style: 'display:flex; gap:8px;' }, [
-            el('button', { class: 'btn btn-ghost btn-sm', onclick: toggleFullscreen }, [isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة']),
+            el('button', { id: 'fullscreen-btn', class: 'btn btn-ghost btn-sm', onclick: toggleFullscreen }, [isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة']),
             el('button', { class: 'btn btn-ghost btn-sm', onclick: () => openQuestions(state.currentId) }, ['تعديل الأسئلة'])
         ])
     ]));
@@ -575,7 +576,8 @@ function toggleFullscreen() {
 
 function handleFullscreenChange() {
     if (state.view !== 'viewer') return;
-    render();
+    const btn = document.getElementById('fullscreen-btn');
+    if (btn) btn.textContent = isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة';
     drawCurrentPage();
 }
 document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -623,7 +625,22 @@ window.addEventListener('resize', () => {
 function goToQuiz() {
     state.quizAnswers = {};
     (state.currentMeta.questions || []).forEach(q => { state.quizAnswers[q.id] = { selected: null, submitted: false, revealed: false }; });
+    state.quizIndex = 0;
     state.view = 'quiz';
+    render();
+}
+
+function goToNextQuestion() {
+    const total = (state.currentMeta.questions || []).length;
+    state.quizIndex = Math.min(state.quizIndex + 1, total);
+    render();
+}
+
+function restartQuiz() {
+    const questions = state.currentMeta.questions || [];
+    state.quizAnswers = {};
+    questions.forEach(q => { state.quizAnswers[q.id] = { selected: null, submitted: false, revealed: false }; });
+    state.quizIndex = 0;
     render();
 }
 
@@ -648,50 +665,69 @@ function renderQuiz() {
         return wrap;
     }
 
-    const mcqs = questions.filter(q => q.type === 'mcq');
-    const submittedMcqs = mcqs.filter(q => state.quizAnswers[q.id].submitted);
-    if (mcqs.length > 0 && submittedMcqs.length === mcqs.length) {
+    // خلصت كل الأسئلة -> ملخص النتيجة
+    if (state.quizIndex >= questions.length) {
+        const mcqs = questions.filter(q => q.type === 'mcq');
         const correctCount = mcqs.filter(q => state.quizAnswers[q.id].selected === q.correct).length;
         wrap.appendChild(el('div', { class: 'score-card' }, [
-            el('div', { style: 'font-size:13px;color:var(--ink-soft);margin-bottom:6px;' }, ['نتيجتك في الأسئلة الاختيارية']),
-            el('div', { class: 'big' }, [`${correctCount} / ${mcqs.length}`]),
+            el('div', { style: 'font-size:13px;color:var(--ink-soft);margin-bottom:6px;' }, ['خلصت كل الأسئلة 🎉']),
+            mcqs.length > 0
+                ? el('div', { class: 'big' }, [`${correctCount} / ${mcqs.length}`])
+                : el('p', {}, ['أحسنت!']),
+            el('div', { style: 'margin-top:16px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;' }, [
+                el('button', { class: 'btn btn-ghost btn-sm', onclick: restartQuiz }, ['إعادة الأسئلة']),
+                el('button', { class: 'btn btn-primary btn-sm', onclick: () => { state.view = 'library'; render(); } }, ['رجوع للمكتبة'])
+            ])
         ]));
+        return wrap;
     }
 
-    questions.forEach((q, i) => {
-        const ans = state.quizAnswers[q.id];
-        const card = el('div', { class: 'qcard' }, [
-            el('div', { class: 'qnum' }, [`سؤال ${i + 1}`]),
-            el('div', { class: 'qtext' }, [q.text]),
-        ]);
-        if (q.type === 'mcq') {
-            q.options.forEach((opt, oi) => {
-                let cls = 'choice';
-                if (ans.submitted) {
-                    if (oi === q.correct) cls += ' correct';
-                    else if (oi === ans.selected) cls += ' wrong';
-                } else if (ans.selected === oi) {
-                    cls += ' selected';
+    const q = questions[state.quizIndex];
+    const ans = state.quizAnswers[q.id];
+    const isLastQ = state.quizIndex === questions.length - 1;
+    const card = el('div', { class: 'qcard' }, [
+        el('div', { class: 'qnum' }, [`سؤال ${state.quizIndex + 1} من ${questions.length}`]),
+        el('div', { class: 'qtext' }, [q.text]),
+    ]);
+
+    if (q.type === 'mcq') {
+        q.options.forEach((opt, oi) => {
+            let cls = 'choice';
+            if (ans.submitted) {
+                if (oi === q.correct) cls += ' correct';
+                else if (oi === ans.selected) cls += ' wrong';
+            }
+            card.appendChild(el('div', {
+                class: cls,
+                onclick: () => {
+                    if (ans.submitted) return;
+                    ans.selected = oi;
+                    ans.submitted = true; // تنعرض النتيجة فوراً بمجرد الاختيار
+                    render();
                 }
-                card.appendChild(el('div', { class: cls, onclick: () => { if (!ans.submitted) { ans.selected = oi; render(); } } }, [
-                    el('input', { type: 'radio', name: 'quiz-' + q.id, checked: ans.selected === oi ? 'checked' : undefined, disabled: ans.submitted ? 'disabled' : undefined }),
-                    el('span', {}, [opt])
-                ]));
-            });
-            if (!ans.submitted) {
-                card.appendChild(el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:8px;', disabled: ans.selected === null ? 'disabled' : undefined, onclick: () => { ans.submitted = true; render(); } }, ['تحقق من الإجابة']));
-            } else {
-                const ok = ans.selected === q.correct;
-                card.appendChild(el('div', { class: 'feedback ' + (ok ? 'ok' : 'no') }, [ok ? '✓ إجابة صحيحة' : '✕ إجابة غير صحيحة']));
-            }
-        } else {
-            card.appendChild(el('button', { class: 'btn btn-ghost btn-sm reveal-btn', onclick: () => { ans.revealed = !ans.revealed; render(); } }, [ans.revealed ? 'إخفاء الإجابة' : 'عرض الإجابة']));
-            if (ans.revealed) {
-                card.appendChild(el('div', { class: 'answer-box' }, [q.answer ? q.answer : 'ما فيه إجابة نموذجية مكتوبة لهذا السؤال.']));
-            }
+            }, [
+                el('input', { type: 'radio', name: 'quiz-' + q.id, checked: ans.selected === oi ? 'checked' : undefined, disabled: ans.submitted ? 'disabled' : undefined }),
+                el('span', {}, [opt])
+            ]));
+        });
+        if (ans.submitted) {
+            const ok = ans.selected === q.correct;
+            card.appendChild(el('div', { class: 'feedback ' + (ok ? 'ok' : 'no') }, [ok ? '✓ إجابة صحيحة' : '✕ إجابة غير صحيحة']));
+            card.appendChild(el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:12px;', onclick: goToNextQuestion }, [isLastQ ? 'عرض النتيجة ←' : 'السؤال التالي ←']));
         }
-        wrap.appendChild(card);
-    });
+    } else {
+        if (!ans.revealed) {
+            card.appendChild(el('button', { class: 'btn btn-ghost btn-sm reveal-btn', onclick: () => { ans.revealed = true; render(); } }, ['عرض الإجابة']));
+        } else {
+            card.appendChild(el('div', { class: 'answer-box' }, [q.answer ? q.answer : 'ما فيه إجابة نموذجية مكتوبة لهذا السؤال.']));
+            card.appendChild(el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:12px;', onclick: goToNextQuestion }, [isLastQ ? 'عرض النتيجة ←' : 'السؤال التالي ←']));
+        }
+    }
+
+    wrap.appendChild(card);
+    wrap.appendChild(el('div', { style: 'text-align:center;color:var(--ink-faint);font-size:12.5px;margin-top:6px;' }, [
+        `${state.quizIndex + 1} / ${questions.length}`
+    ]));
 
     return wrap;
 }
