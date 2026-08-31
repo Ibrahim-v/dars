@@ -242,6 +242,7 @@ let state = {
     pdfDoc: null,
     currentPage: 1,
     addError: '',
+    addMode: 'pdf',
     saving: false,
     qDraft: { type: 'mcq', text: '', options: ['', ''], correct: 0, answer: '' },
     quizAnswers: {},
@@ -300,11 +301,12 @@ function renderLibrary() {
     const grid = el('div', { class: 'grid' });
     state.lessons.forEach((l, i) => {
         const color = tabColors[i % tabColors.length];
+        const isPptx = l.fileType === 'pptx';
         grid.appendChild(el('div', { class: 'card' }, [
-            el('div', { class: 'tab', style: `background:${color};` }, ['PDF']),
+            el('div', { class: 'tab', style: `background:${color};` }, [isPptx ? 'PPTX' : 'PDF']),
             el('h3', {}, [l.title]),
             el('div', { class: 'meta' }, [
-                el('span', {}, [`${l.pageCount || '؟'} صفحة`]),
+                el('span', {}, [isPptx ? 'عرض بوربوينت' : `${l.pageCount || '؟'} صفحة`]),
                 el('span', {}, [`${(l.questions || []).length} سؤال`]),
             ]),
             el('div', { class: 'row' }, [
@@ -336,41 +338,143 @@ function renderAdd() {
         el('label', {}, ['عنوان الدرس']),
         el('input', { type: 'text', id: 'lesson-title-input', placeholder: 'مثال: الدرس الأول - المعادلات' })
     ]));
-    panel.appendChild(el('div', { class: 'field' }, [
-        el('label', {}, ['ملف PDF']),
-        el('input', { type: 'file', accept: 'application/pdf', id: 'lesson-file-input' })
+
+    panel.appendChild(el('div', { class: 'qtype-toggle' }, [
+        el('button', { type: 'button', class: state.addMode === 'pdf' ? 'active' : '', onclick: () => { state.addMode = 'pdf'; render(); } }, ['ملف PDF']),
+        el('button', { type: 'button', class: state.addMode === 'pptx' ? 'active' : '', onclick: () => { state.addMode = 'pptx'; render(); } }, ['ملف PowerPoint (PPTX)']),
+        el('button', { type: 'button', class: state.addMode === 'images' ? 'active' : '', onclick: () => { state.addMode = 'images'; render(); } }, ['صور شرائح']),
     ]));
-    panel.appendChild(el('button', { class: 'btn btn-primary', onclick: handleAddLesson }, ['حفظ الدرس']));
+
+    if (state.addMode === 'pdf') {
+        panel.appendChild(el('div', { class: 'field' }, [
+            el('label', {}, ['ملف PDF']),
+            el('input', { type: 'file', accept: 'application/pdf', id: 'lesson-file-input' })
+        ]));
+    } else if (state.addMode === 'pptx') {
+        panel.appendChild(el('div', { class: 'banner info' }, [
+            'يترفع ملف الـ PowerPoint زي ما هو، وينعرض مباشرة داخل الموقع (بدون تحويله لـ PDF) — هذا يتفادى مشكلة النص العربي المعكوس اللي تصير مع بعض ملفات Canva المصدَّرة PDF.'
+        ]));
+        panel.appendChild(el('div', { class: 'field' }, [
+            el('label', {}, ['ملف PPTX']),
+            el('input', { type: 'file', accept: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation', id: 'lesson-pptx-input' })
+        ]));
+    } else {
+        panel.appendChild(el('div', { class: 'banner info' }, [
+            'صدّر شرائحك من Canva كصور (Share ← Download ← PNG، وفعّل "Download all pages")، بعدها اختر كل الصور هنا دفعة وحدة بنفس ترتيب الدرس. الموقع بيجمعها تلقائياً بملف PDF واحد نظيف قبل الرفع.'
+        ]));
+        panel.appendChild(el('div', { class: 'field' }, [
+            el('label', {}, ['صور الشرائح']),
+            el('input', { type: 'file', accept: 'image/*', id: 'lesson-images-input', multiple: 'multiple' })
+        ]));
+    }
+
+    panel.appendChild(el('button', { class: 'btn btn-primary', style: 'margin-top:10px;', onclick: handleAddLesson }, ['حفظ الدرس']));
     wrap.appendChild(panel);
     return wrap;
 }
 
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('تعذّرت قراءة الصورة'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function getImageSize(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => reject(new Error('صورة غير صالحة'));
+        img.src = dataUrl;
+    });
+}
+
+// يجمع مجموعة صور بملف PDF واحد (كل صورة = صفحة كاملة)، عشان نتفادى خلل ترميز النص عند التصدير المباشر PDF من Canva
+async function combineImagesToPdf(files) {
+    const { jsPDF } = window.jspdf;
+    let doc = null;
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const dataUrl = await readFileAsDataURL(file);
+        const { width, height } = await getImageSize(dataUrl);
+        const w = width * 0.75; // تحويل بكسل إلى نقاط (pt) تقريبياً
+        const h = height * 0.75;
+        const orientation = w > h ? 'l' : 'p';
+        const imgFormat = /png/i.test(file.type) ? 'PNG' : 'JPEG';
+        if (i === 0) {
+            doc = new jsPDF({ orientation, unit: 'pt', format: [w, h] });
+        } else {
+            doc.addPage([w, h], orientation);
+        }
+        doc.addImage(dataUrl, imgFormat, 0, 0, w, h);
+    }
+    const blob = doc.output('blob');
+    return new File([blob], 'lesson.pdf', { type: 'application/pdf' });
+}
+
 async function handleAddLesson() {
     const titleInput = document.getElementById('lesson-title-input');
-    const fileInput = document.getElementById('lesson-file-input');
     const title = titleInput.value.trim();
-    const file = fileInput.files[0];
     state.addError = '';
 
     if (!title) { state.addError = 'اكتب عنوان للدرس.'; render(); return; }
-    if (!file) { state.addError = 'اختر ملف PDF.'; render(); return; }
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-        state.addError = 'الملف لازم يكون PDF.'; render(); return;
+
+    let file;
+    let fileType = 'pdf';
+    if (state.addMode === 'images') {
+        const imagesInput = document.getElementById('lesson-images-input');
+        const files = Array.from((imagesInput && imagesInput.files) || []).sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+        if (files.length === 0) { state.addError = 'اختر صور الشرائح.'; render(); return; }
+
+        root().innerHTML = '';
+        root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يجهّز ملف الـ PDF من الصور...'])]));
+
+        try {
+            file = await combineImagesToPdf(files);
+        } catch (err) {
+            state.addError = 'ما قدرت أجهّز ملف الـ PDF من الصور: ' + err.message;
+            state.view = 'add';
+            render();
+            return;
+        }
+    } else if (state.addMode === 'pptx') {
+        const pptxInput = document.getElementById('lesson-pptx-input');
+        file = pptxInput && pptxInput.files[0];
+        if (!file) { state.addError = 'اختر ملف PPTX.'; render(); return; }
+        if (!file.name.toLowerCase().endsWith('.pptx')) {
+            state.addError = 'الملف لازم يكون PPTX.'; render(); return;
+        }
+        fileType = 'pptx';
+    } else {
+        const fileInput = document.getElementById('lesson-file-input');
+        file = fileInput.files[0];
+        if (!file) { state.addError = 'اختر ملف PDF.'; render(); return; }
+        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            state.addError = 'الملف لازم يكون PDF.'; render(); return;
+        }
     }
 
     root().innerHTML = '';
     root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يرفع الملف...'])]));
 
     try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
-        const pageCount = pdfDoc.numPages;
+        let pageCount = null;
+        if (fileType === 'pdf') {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
+            pageCount = pdfDoc.numPages;
+        }
 
         const uploaded = await uploadToCloudinary(file);
 
         await addDoc(collection(db, "lessons"), {
             userId: currentUser.uid,
             title,
+            fileType,
             pageCount,
             pdfUrl: uploaded.url,
             publicId: uploaded.publicId,
@@ -499,6 +603,13 @@ async function openViewer(id) {
     root().innerHTML = '';
     root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يفتح الدرس...'])]));
 
+    if (state.currentMeta.fileType === 'pptx') {
+        state.pdfDoc = null;
+        state.view = 'viewer';
+        render();
+        return;
+    }
+
     try {
         const doc_ = await pdfjsLib.getDocument({ url: state.currentMeta.pdfUrl }).promise;
         state.pdfDoc = doc_;
@@ -518,6 +629,23 @@ function renderViewer() {
     wrap.appendChild(el('div', { class: 'top-actions' }, [
         el('div', { class: 'breadcrumb', onclick: () => { state.view = 'library'; render(); } }, ['→ رجوع للمكتبة']),
     ]));
+
+    if (state.currentMeta.fileType === 'pptx') {
+        wrap.appendChild(el('div', { class: 'viewer-top' }, [
+            el('h2', {}, [state.currentMeta.title]),
+            el('button', { id: 'fullscreen-btn', class: 'btn btn-ghost btn-sm', onclick: toggleFullscreen }, [isFullscreenActive() ? '✕ إغلاق ملء الشاشة' : '⛶ ملء الشاشة']),
+        ]));
+        const officeSrc = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(state.currentMeta.pdfUrl);
+        const fsTarget = el('div', { id: 'pdf-fullscreen-target', class: 'pptx-frame-wrap' }, [
+            el('iframe', { class: 'pptx-frame', src: officeSrc, frameborder: '0' })
+        ]);
+        wrap.appendChild(fsTarget);
+        wrap.appendChild(el('div', { style: 'text-align:center;margin-top:14px;' }, [
+            el('button', { class: 'btn btn-primary btn-sm', onclick: goToQuiz }, ['الانتقال للأسئلة ←'])
+        ]));
+        return wrap;
+    }
+
     wrap.appendChild(el('div', { class: 'viewer-top' }, [
         el('h2', {}, [state.currentMeta.title]),
         el('div', { style: 'display:flex; gap:8px;' }, [
@@ -742,6 +870,7 @@ function renderQuiz() {
 /* ---------------- Library actions ---------------- */
 function openAdd() {
     state.addError = '';
+    state.addMode = 'pdf';
     state.view = 'add';
     render();
 }
