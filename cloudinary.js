@@ -15,10 +15,15 @@ export async function uploadToCloudinary(file) {
     formData.append("file", file);
     formData.append("upload_preset", UPLOAD_PRESET);
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
-        method: "POST",
-        body: formData
-    });
+    let res;
+    try {
+        res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`, {
+            method: "POST",
+            body: formData
+        });
+    } catch (networkErr) {
+        throw new Error("تعذّر الاتصال بالسيرفر أثناء الرفع — تأكد من اتصالك بالإنترنت، أو إن حجم الملف مو كبير جداً، وحاول مرة ثانية.");
+    }
     const data = await res.json();
 
     if (!data.secure_url) {
