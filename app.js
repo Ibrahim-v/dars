@@ -376,9 +376,9 @@ function renderAdd() {
             el('label', {}, ['ملف PPTX']),
             el('input', { type: 'file', accept: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation', id: 'lesson-pptx-input' })
         ]));
-    } else if (state.imgStep === 'reorder' && state.imgQueue.length > 0) {
+    } else if (isEditing) {
         panel.appendChild(el('div', { class: 'banner info' }, [
-            `رتّب الصور بالأسهم، احذف اللي ما تبيه، وضيف صور زيادة لو احتجت. بعدها اضغط "حفظ الدرس". (${state.imgQueue.length} صورة)`
+            `رتّب الصور بالأسهم، احذف اللي ما تبيه، وضيف صور زيادة لو احتجت. بعدها اضغط "حفظ التعديلات". (${state.imgQueue.length} صورة)`
         ]));
         const list = el('div', { style: 'display:flex; flex-direction:column; gap:8px; margin-bottom:14px;' });
         state.imgQueue.forEach((img, idx) => {
@@ -396,18 +396,14 @@ function renderAdd() {
             el('label', {}, ['+ إضافة صور جديدة لنفس الدرس']),
             el('input', { type: 'file', accept: 'image/*,.zip,application/zip,application/x-zip-compressed', id: 'lesson-append-images-input', multiple: 'multiple', onchange: (e) => appendMoreImages(e.target) })
         ]));
-        if (!isEditing) {
-            panel.appendChild(el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:10px;', onclick: () => { state.imgStep = 'select'; state.imgQueue = []; render(); } }, ['🔙 رجوع لاختيار صور ثانية']));
-        }
     } else {
         panel.appendChild(el('div', { class: 'banner info' }, [
-            'صدّر شرائحك من Canva كصور (Share ← Download ← PNG، فعّل "Download all pages") — بينزل عندك ملف ZIP فيه كل الصور. اختر نفس ملف الـ ZIP هنا مباشرة (أو صور منفردة)، وبترتبهم بعدين قبل الحفظ.'
+            'صدّر شرائحك من Canva كصور (Share ← Download ← PNG، فعّل "Download all pages") — بينزل عندك ملف ZIP فيه كل الصور. اختر نفس ملف الـ ZIP هنا مباشرة (أو صور منفردة). الملفات تترتب أبجدياً/رقمياً حسب اسمها تلقائياً.'
         ]));
         panel.appendChild(el('div', { class: 'field' }, [
             el('label', {}, ['ملف ZIP أو صور الشرائح']),
             el('input', { type: 'file', accept: 'image/*,.zip,application/zip,application/x-zip-compressed', id: 'lesson-images-input', multiple: 'multiple' })
         ]));
-        panel.appendChild(el('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:10px;', onclick: handlePrepareImages }, ['تجهيز الصور →']));
     }
 
     panel.appendChild(el('button', { class: 'btn btn-primary', style: 'margin-top:10px;', onclick: handleAddLesson }, [isEditing ? 'حفظ التعديلات' : 'حفظ الدرس']));
@@ -490,35 +486,6 @@ async function extractImageFilesFromRaw(rawFiles) {
     imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     return imageFiles;
 }
-
-async function handlePrepareImages() {
-    const input = document.getElementById('lesson-images-input');
-    const rawFiles = Array.from((input && input.files) || []);
-    if (rawFiles.length === 0) { state.addError = 'اختر ملف ZIP أو صور.'; render(); return; }
-
-    root().innerHTML = '';
-    root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يفك الملفات ويجهّز الصور...'])]));
-
-    try {
-        const imageFiles = await extractImageFilesFromRaw(rawFiles);
-        if (imageFiles.length === 0) {
-            throw new Error('ما لقيت صور صالحة داخل الملفات المختارة.');
-        }
-
-        const queue = [];
-        for (let i = 0; i < imageFiles.length; i++) {
-            const compressed = await compressImageFile(imageFiles[i]);
-            const dataUrl = await readFileAsDataURL(compressed);
-            queue.push({ id: 'img' + i + '_' + Date.now(), file: compressed, dataUrl, name: imageFiles[i].name });
-        }
-        state.imgQueue = queue;
-        state.imgStep = 'reorder';
-        state.addError = '';
-    } catch (err) {
-        state.addError = 'ما قدرت أجهّز الصور: ' + err.message;
-        state.imgStep = 'select';
-    }
-    state.view = 'add';
     render();
 }
 
@@ -599,21 +566,45 @@ async function handleAddLesson() {
     let file;
     let fileType = 'pdf';
     if (state.addMode === 'images') {
-        if (!state.imgQueue || state.imgQueue.length === 0) {
-            state.addError = 'جهّز صور الشرائح ورتّبها أول (زر "تجهيز الصور").'; render(); return;
-        }
+        if (state.editingLessonId) {
+            if (!state.imgQueue || state.imgQueue.length === 0) {
+                state.addError = 'ما فيه صور بالدرس. ضيف صور أول.'; render(); return;
+            }
+            root().innerHTML = '';
+            root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يبني ملف الـ PDF من الصور...'])]));
+            try {
+                const orderedFiles = state.imgQueue.map(q => q.file);
+                file = await combineImagesToPdf(orderedFiles);
+            } catch (err) {
+                state.addError = 'ما قدرت أجهّز ملف الـ PDF من الصور: ' + err.message;
+                state.view = 'add';
+                render();
+                return;
+            }
+        } else {
+            const imagesInput = document.getElementById('lesson-images-input');
+            const rawFiles = Array.from((imagesInput && imagesInput.files) || []);
+            if (rawFiles.length === 0) { state.addError = 'اختر ملف ZIP أو صور.'; render(); return; }
 
-        root().innerHTML = '';
-        root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يبني ملف الـ PDF من الصور...'])]));
+            root().innerHTML = '';
+            root().appendChild(el('div', { class: 'loading' }, [el('div', { class: 'spin' }), el('div', {}, ['يفك الملفات ويبني ملف الـ PDF...'])]));
 
-        try {
-            const orderedFiles = state.imgQueue.map(q => q.file);
-            file = await combineImagesToPdf(orderedFiles);
-        } catch (err) {
-            state.addError = 'ما قدرت أجهّز ملف الـ PDF من الصور: ' + err.message;
-            state.view = 'add';
-            render();
-            return;
+            try {
+                const imageFiles = await extractImageFilesFromRaw(rawFiles);
+                if (imageFiles.length === 0) {
+                    throw new Error('ما لقيت صور صالحة داخل الملفات المختارة.');
+                }
+                const compressedFiles = [];
+                for (const f of imageFiles) {
+                    compressedFiles.push(await compressImageFile(f));
+                }
+                file = await combineImagesToPdf(compressedFiles);
+            } catch (err) {
+                state.addError = 'ما قدرت أجهّز ملف الـ PDF من الصور: ' + err.message;
+                state.view = 'add';
+                render();
+                return;
+            }
         }
     } else if (state.addMode === 'pptx') {
         const pptxInput = document.getElementById('lesson-pptx-input');
